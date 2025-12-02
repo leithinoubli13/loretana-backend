@@ -1,0 +1,103 @@
+import { Injectable, Logger } from '@nestjs/common';
+import * as nodemailer from 'nodemailer';
+
+interface AttachmentConfig {
+  filename: string;
+  path?: string;
+  content?: Buffer | string;
+  contentType?: string;
+}
+
+interface MailResponse {
+  messageId: string;
+  response?: string;
+}
+
+@Injectable()
+export class EmailService {
+  private transporter: nodemailer.Transporter;
+  private logger = new Logger(EmailService.name);
+  private readonly senderEmail: string;
+
+  constructor() {
+    this.senderEmail = process.env.EMAIL_USER || 'inoublileith6@gmail.com';
+
+    // Initialize transporter with Gmail SMTP (or your email provider)
+    // For Gmail, use App Passwords if 2FA is enabled
+    this.transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: this.senderEmail,
+        pass: process.env.EMAIL_PASSWORD || '',
+      },
+    });
+
+    // Verify connection asynchronously (don't block startup)
+    this.verifyConnectionAsync();
+  }
+
+  private verifyConnectionAsync(): void {
+    // Run verification in the background without blocking
+    this.verifyConnection().catch((error) => {
+      this.logger.warn(
+        'Email verification failed - service will attempt to send emails anyway',
+        error,
+      );
+    });
+  }
+
+  private async verifyConnection(): Promise<void> {
+    try {
+      await this.transporter.verify();
+      this.logger.log('Email service connected successfully');
+    } catch (error) {
+      this.logger.warn('Failed to verify email connection', error);
+      // Don't throw - allow service to start even if verification fails
+    }
+  }
+
+  async sendEmail(
+    to: string,
+    subject: string,
+    text: string,
+    html?: string,
+    attachments?: AttachmentConfig[],
+    senderEmail?: string,
+  ): Promise<MailResponse> {
+    try {
+      if (!to) {
+        throw new Error('Recipient email address is required');
+      }
+
+      if (!subject || !text) {
+        throw new Error('Subject and text are required');
+      }
+
+      const mailOptions = {
+        from: senderEmail || this.senderEmail,
+        to,
+        subject,
+        text,
+        html: html || text,
+        attachments: attachments || [],
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      const info: any = await this.transporter.sendMail(mailOptions);
+
+      this.logger.log(
+        `Email sent successfully from ${this.senderEmail} to ${to}`,
+      );
+
+      return {
+        messageId: info.messageId as string,
+        response: info.response as string | undefined,
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error occurred';
+      this.logger.error(`Failed to send email: ${errorMessage}`, error);
+      throw error;
+    }
+  }
+}
