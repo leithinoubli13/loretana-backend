@@ -6,8 +6,8 @@ let app: any;
 export default async (req: VercelRequest, res: VercelResponse) => {
   if (!app) {
     try {
-      // Import AppModule from the dist folder at runtime
-      const { AppModule } = await import('../dist/src/app.module');
+      // Import AppModule from the dist folder at runtime (use compiled JS)
+      const { AppModule } = await import('../dist/src/app.module.js');
       app = await NestFactory.create(AppModule);
       await app.init();
     } catch (error) {
