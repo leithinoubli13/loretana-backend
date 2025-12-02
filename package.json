@@ -24,6 +24,7 @@
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
     "@sendgrid/mail": "^8.1.6",
+    "@vercel/node": "^3.0.0",
     "dotenv": "^17.2.3",
     "nodemailer": "^7.0.11",
     "qrcode": "^1.5.4",
