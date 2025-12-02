@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const nodemailer = require('nodemailer');
+// Use SendGrid as an optional fallback for environments where SMTP creds are not provided
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const sgMail = require('@sendgrid/mail');
 // Use MailComposer to build a raw message with explicit nested MIME parts
 // This helps ensure multipart/alternative (text+html) is nested inside
 // multipart/mixed when attachments are present so clients render HTML first.
@@ -24,19 +27,39 @@ export class EmailService {
   private transporter: any;
   private logger = new Logger(EmailService.name);
   private readonly senderEmail: string;
+  private useSendGrid = false;
 
   constructor() {
     this.senderEmail = process.env.EMAIL_USER || 'inoublileith6@gmail.com';
 
-    // Initialize transporter with Gmail SMTP
-    // For Gmail, use App Passwords if 2FA is enabled
-    this.transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: this.senderEmail,
-        pass: process.env.EMAIL_PASSWORD || '',
-      },
-    });
+    // If a SendGrid API key is provided, prefer SendGrid (no SMTP credentials required)
+    if (process.env.SENDGRID_API_KEY) {
+      try {
+        sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+        this.useSendGrid = true;
+        this.logger.log('Using SendGrid for sending emails (SENDGRID_API_KEY detected)');
+      } catch (err) {
+        this.logger.warn('Failed to initialize SendGrid client, will attempt SMTP if configured', err);
+        this.useSendGrid = false;
+      }
+    }
+
+    // Initialize transporter with Gmail SMTP if not using SendGrid
+    if (!this.useSendGrid) {
+      const smtpPass = process.env.EMAIL_PASSWORD || '';
+      if (!smtpPass) {
+        this.logger.warn('EMAIL_PASSWORD is not set. SMTP (Gmail) auth will likely fail. Consider setting EMAIL_PASSWORD (app password) or providing SENDGRID_API_KEY for SendGrid.');
+      }
+
+      // For Gmail, use App Passwords if 2FA is enabled
+      this.transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: this.senderEmail,
+          pass: smtpPass,
+        },
+      });
+    }
 
     // Verify connection asynchronously (don't block startup)
     this.verifyConnectionAsync();
@@ -250,7 +273,39 @@ export class EmailService {
         });
       });
 
-      // Send raw MIME message to ensure structure is preserved
+      // If SendGrid is configured, use it instead of raw SMTP
+      if (this.useSendGrid) {
+        const sgAttachments = allAttachments.map((a) => ({
+          content: a.content ? (Buffer.isBuffer(a.content) ? a.content.toString('base64') : Buffer.from(String(a.content)).toString('base64')) : undefined,
+          filename: a.filename,
+          type: a.contentType,
+          disposition: 'attachment',
+        }));
+
+        const msg: any = {
+          from: senderEmail || this.senderEmail,
+          to,
+          subject,
+          text,
+          html: formattedHtml,
+          attachments: sgAttachments,
+        };
+
+        this.logger.debug('Sending email via SendGrid', { to, subject, attachments: sgAttachments.length });
+
+        const response = await sgMail.send(msg);
+        // SendGrid returns an array of responses for some versions
+        const first = Array.isArray(response) ? response[0] : response;
+
+        this.logger.log(`Email sent via SendGrid from ${senderEmail || this.senderEmail} to ${to}`);
+
+        return {
+          messageId: first && first.headers ? (first.headers['x-message-id'] || '') : '',
+          response: first && first.statusCode ? String(first.statusCode) : undefined,
+        };
+      }
+
+      // Send raw MIME message via SMTP transporter to ensure structure is preserved
       // Provide explicit envelope to avoid relying on header parsing
       const envelope = { from: senderEmail || this.senderEmail, to };
 
