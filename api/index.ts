@@ -8,7 +8,7 @@ const ALLOWED_ORIGINS = [
   'https://loretana.com',
   'https://www.loretana.com',
   'http://localhost:3000',
-  'http://localhost:3001',
+  'https://loretana-backend.vercel.app/',
 ];
 
 function setCorsHeaders(req: VercelRequest, res: VercelResponse) {
@@ -43,20 +43,16 @@ export default async (req: VercelRequest, res: VercelResponse) => {
     try {
         let moduleImport: any = null;
 
-        // Try compiled output first (when `npm run build` was executed)
+        // Import from the compiled dist output (files are at dist/app.module.js, not dist/src/app.module.js)
         try {
-          // ESM build output uses .js extension
-          // @ts-ignore - runtime-only dynamic import; `dist` won't exist during type-check
-          moduleImport = await import('../dist/src/app.module.js');
-        } catch (e1) {
-          // Fall back to importing the TS source so Vercel's bundler can include it
-          try {
-            // @ts-ignore - runtime-only dynamic import of source for Vercel bundling
-            moduleImport = await import('../src/app.module');
-          } catch (e2) {
-            console.error('Both dist and src imports failed', { e1, e2 });
-            throw e2 || e1;
-          }
+          // @ts-ignore - runtime-only dynamic import
+          moduleImport = await import('../dist/app.module.js');
+        } catch (err) {
+          console.error('Failed to import AppModule from dist:', err);
+          throw new Error(
+            'Cannot find compiled AppModule. Ensure "npm run build" was executed before deployment. ' +
+            'Error: ' + (err instanceof Error ? err.message : String(err))
+          );
         }
 
         const { AppModule } = moduleImport;

@@ -1,0 +1,427 @@
+import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { google } from 'googleapis';
+import { Readable } from 'stream';
+import * as fs from 'fs';
+import * as path from 'path';
+
+interface GoogleDriveAuth {
+  type: string;
+  project_id: string;
+  private_key_id: string;
+  private_key: string;
+  client_email: string;
+  client_id: string;
+  auth_uri: string;
+  token_uri: string;
+  auth_provider_x509_cert_url: string;
+  client_x509_cert_url: string;
+}
+
+@Injectable()
+export class CustomizerService {
+  private readonly logger = new Logger(CustomizerService.name);
+  private drive: any;
+  private sessionFolderCache: Map<string, string> = new Map();
+  private sharedDriveId: string | null = null;
+
+  constructor() {
+    this.initializeGoogleDrive();
+  }
+
+  /**
+   * Initialize Google Drive API with service account credentials
+   */
+  private initializeGoogleDrive(): void {
+    try {
+      // Get credentials from environment variable or file
+      let credentials: GoogleDriveAuth;
+      let credSource = 'unknown';
+
+      if (process.env.GOOGLE_DRIVE_CREDENTIALS_JSON) {
+        // Parse JSON string from environment variable
+        credSource = 'environment variable (GOOGLE_DRIVE_CREDENTIALS_JSON)';
+        credentials = JSON.parse(process.env.GOOGLE_DRIVE_CREDENTIALS_JSON);
+      } else if (process.env.GOOGLE_DRIVE_CREDENTIALS_PATH) {
+        // Load from file path
+        credSource = `file path (${process.env.GOOGLE_DRIVE_CREDENTIALS_PATH})`;
+        const credPath = process.env.GOOGLE_DRIVE_CREDENTIALS_PATH;
+        if (!fs.existsSync(credPath)) {
+          throw new Error(`Google Drive credentials file not found at ${credPath}`);
+        }
+        const credFile = fs.readFileSync(credPath, 'utf-8');
+        credentials = JSON.parse(credFile);
+      } else {
+        // Try to load from default location
+        const defaultPath = path.join(process.cwd(), 'google-drive-service-account.json');
+        if (fs.existsSync(defaultPath)) {
+          credSource = `default location (${defaultPath})`;
+          const credFile = fs.readFileSync(defaultPath, 'utf-8');
+          credentials = JSON.parse(credFile);
+        } else {
+          throw new Error(
+            'Google Drive credentials not configured. Set GOOGLE_DRIVE_CREDENTIALS_JSON or GOOGLE_DRIVE_CREDENTIALS_PATH',
+          );
+        }
+      }
+
+      // Validate that this is a service account (has private_key field)
+      if (!credentials.private_key) {
+        throw new Error(
+          'Invalid credentials: missing private_key. You need a Google Service Account JSON, not OAuth credentials.',
+        );
+      }
+
+      try {
+        const auth = new google.auth.GoogleAuth({
+          credentials,
+          scopes: ['https://www.googleapis.com/auth/drive'],
+        });
+
+      this.drive = google.drive({ version: 'v3', auth });
+      
+      // Get Shared Drive ID if configured (optional - for advanced setups)
+      this.sharedDriveId = process.env.GOOGLE_DRIVE_SHARED_DRIVE_ID || null;
+      if (this.sharedDriveId) {
+        this.logger.log(`Using Shared Drive: ${this.sharedDriveId}`);
+      } else {
+        this.logger.log(
+          'Using service account root Drive. Files will be stored in the service account\'s Drive. ' +
+          'Optionally, set GOOGLE_DRIVE_SHARED_DRIVE_ID for shared drives.',
+        );
+      }
+
+      this.logger.log(`Google Drive API initialized successfully (credentials from: ${credSource})`);
+      } catch (authError) {
+        this.logger.warn(
+          `Google Drive API credentials validation failed: ${authError.message}. ` +
+          `Please ensure you have a valid Google Service Account JSON from Google Cloud Console.`,
+        );
+        // For local testing, we'll allow initialization to continue but API calls will fail
+        this.drive = null;
+      }
+    } catch (error) {
+      this.logger.error('Failed to initialize Google Drive API:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get or create a session folder in Google Drive
+   * Structure: /sessions/<sessionId>/
+   */
+  private async getOrCreateSessionFolder(sessionId: string): Promise<string> {
+    // Check cache first
+    if (this.sessionFolderCache.has(sessionId)) {
+      return this.sessionFolderCache.get(sessionId)!;
+    }
+
+    try {
+      const sessionsFolder = await this.getOrCreateFolder('sessions', null);
+      const sessionFolder = await this.getOrCreateFolder(sessionId, sessionsFolder);
+      this.sessionFolderCache.set(sessionId, sessionFolder);
+      return sessionFolder;
+    } catch (error) {
+      this.logger.error(`Failed to get/create session folder for ${sessionId}:`, error);
+      throw new BadRequestException('Failed to prepare upload directory');
+    }
+  }
+
+  /**
+   * Get or create a folder by name in Google Drive (or Shared Drive if configured)
+   * @param folderName Name of the folder
+   * @param parentFolderId Parent folder ID (null for root or shared drive root)
+   * @returns Folder ID
+   */
+  private async getOrCreateFolder(folderName: string, parentFolderId: string | null): Promise<string> {
+    try {
+      // Search for existing folder
+      let query = `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+      if (parentFolderId) {
+        query += ` and '${parentFolderId}' in parents`;
+      } else if (this.sharedDriveId) {
+        query += ` and '${this.sharedDriveId}' in parents`;
+      } else {
+        query += ` and 'root' in parents`;
+      }
+
+      const listOptions: any = {
+        q: query,
+        spaces: 'drive',
+        fields: 'files(id, name)',
+        pageSize: 1,
+      };
+
+      // Use corpora parameter for shared drives
+      if (this.sharedDriveId) {
+        listOptions.corpora = 'drive';
+        listOptions.driveId = this.sharedDriveId;
+        listOptions.includeItemsFromAllDrives = true;
+        listOptions.supportsAllDrives = true;
+      }
+
+      const response = await this.drive.files.list(listOptions);
+
+      if (response.data.files && response.data.files.length > 0) {
+        this.logger.debug(`Found existing folder: ${folderName}`);
+        return response.data.files[0].id;
+      }
+
+      // Create new folder
+      const createOptions: any = {
+        resource: {
+          name: folderName,
+          mimeType: 'application/vnd.google-apps.folder',
+          parents: parentFolderId 
+            ? [parentFolderId] 
+            : this.sharedDriveId 
+              ? [this.sharedDriveId] 
+              : ['root'],
+        },
+        fields: 'id',
+      };
+
+      // Add shared drive parameters if using shared drive
+      if (this.sharedDriveId) {
+        createOptions.supportsAllDrives = true;
+      }
+
+      const createResponse = await this.drive.files.create(createOptions);
+
+      this.logger.debug(`Created new folder: ${folderName} with ID: ${createResponse.data.id}`);
+      return createResponse.data.id;
+    } catch (error) {
+      this.logger.error(`Failed to get/create folder ${folderName}:`, error);
+      throw new BadRequestException(`Failed to manage folder: ${folderName}`);
+    }
+  }
+
+  /**
+   * Upload or overwrite an image file in a session folder
+   * @param sessionId Unique session ID
+   * @param file Express Multer file object
+   * @returns Shareable URL and file details
+   */
+  async uploadSessionImage(sessionId: string, file: Express.Multer.File): Promise<{
+    success: boolean;
+    fileId: string;
+    fileName: string;
+    shareableUrl: string;
+    message: string;
+  }> {
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+
+    if (!sessionId || sessionId.trim() === '') {
+      throw new BadRequestException('Session ID is required');
+    }
+
+    // Check if Google Drive API is properly initialized
+    if (!this.drive) {
+      throw new BadRequestException(
+        'Google Drive service is not configured. ' +
+        'Please set GOOGLE_DRIVE_CREDENTIALS_JSON or GOOGLE_DRIVE_CREDENTIALS_PATH ' +
+        'with a valid Google Service Account JSON from Google Cloud Console. ' +
+        'See CUSTOMIZER_SETUP.md for instructions.',
+      );
+    }
+
+    // Validate file type
+    const allowedMimes = ['image/png', 'image/jpeg'];
+    if (!allowedMimes.includes(file.mimetype)) {
+      throw new BadRequestException('Only PNG and JPG images are allowed');
+    }
+
+    try {
+      const sessionFolderId = await this.getOrCreateSessionFolder(sessionId);
+
+      // Check if final.png already exists and delete it
+      const existingFileId = await this.findFileInFolder('final.png', sessionFolderId);
+      if (existingFileId) {
+        await this.deleteFile(existingFileId);
+        this.logger.debug(`Deleted existing final.png for session: ${sessionId}`);
+      }
+
+      // Upload the new file as final.png
+      const fileMetadata = {
+        name: 'final.png',
+        parents: [sessionFolderId],
+      };
+
+      const media = {
+        mimeType: file.mimetype,
+        body: Readable.from(file.buffer),
+      };
+
+      const uploadResponse = await this.drive.files.create({
+        resource: fileMetadata,
+        media: media,
+        fields: 'id, name, webViewLink',
+      });
+
+      const fileId = uploadResponse.data.id;
+
+      // Make file publicly shareable
+      await this.makeFilePublic(fileId);
+
+      // Generate shareable URL
+      const shareableUrl = `https://drive.google.com/uc?id=${fileId}`;
+
+      this.logger.log(`Successfully uploaded image for session ${sessionId}: ${fileId}`);
+
+      return {
+        success: true,
+        fileId,
+        fileName: 'final.png',
+        shareableUrl,
+        message: 'Image uploaded successfully',
+      };
+    } catch (error) {
+      this.logger.error(`Failed to upload image for session ${sessionId}:`, error);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to upload image');
+    }
+  }
+
+  /**
+   * Find a file by name in a specific folder
+   * @param fileName Name of the file
+   * @param folderId Parent folder ID
+   * @returns File ID or null if not found
+   */
+  private async findFileInFolder(fileName: string, folderId: string): Promise<string | null> {
+    try {
+      const query = `name='${fileName}' and '${folderId}' in parents and trashed=false`;
+      const response = await this.drive.files.list({
+        q: query,
+        spaces: 'drive',
+        fields: 'files(id, name)',
+        pageSize: 1,
+      });
+
+      if (response.data.files && response.data.files.length > 0) {
+        return response.data.files[0].id;
+      }
+      return null;
+    } catch (error) {
+      this.logger.error(`Failed to find file ${fileName} in folder ${folderId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Make a file publicly accessible
+   * @param fileId Google Drive file ID
+   */
+  private async makeFilePublic(fileId: string): Promise<void> {
+    try {
+      await this.drive.permissions.create({
+        fileId,
+        resource: {
+          role: 'reader',
+          type: 'anyone',
+        },
+      });
+      this.logger.debug(`File ${fileId} made publicly accessible`);
+    } catch (error) {
+      this.logger.error(`Failed to make file ${fileId} public:`, error);
+      // Don't throw - the file is still uploadable even if sharing fails
+    }
+  }
+
+  /**
+   * Delete a file from Google Drive
+   * @param fileId Google Drive file ID
+   */
+  private async deleteFile(fileId: string): Promise<void> {
+    try {
+      await this.drive.files.delete({
+        fileId,
+      });
+      this.logger.debug(`File ${fileId} deleted successfully`);
+    } catch (error) {
+      this.logger.error(`Failed to delete file ${fileId}:`, error);
+      throw new BadRequestException('Failed to delete file');
+    }
+  }
+
+  /**
+   * Delete all files in a session folder (cleanup function)
+   * @param sessionId Unique session ID
+   * @returns Deletion result
+   */
+  async deleteSessionFiles(sessionId: string): Promise<{
+    success: boolean;
+    message: string;
+    filesDeleted: number;
+  }> {
+    if (!sessionId || sessionId.trim() === '') {
+      throw new BadRequestException('Session ID is required');
+    }
+
+    try {
+      const sessionFolderId = await this.getOrCreateSessionFolder(sessionId);
+
+      // Get all files in the session folder
+      const listResponse = await this.drive.files.list({
+        q: `'${sessionFolderId}' in parents and trashed=false`,
+        spaces: 'drive',
+        fields: 'files(id, name)',
+        pageSize: 100,
+      });
+
+      const files = listResponse.data.files || [];
+      let deletedCount = 0;
+
+      // Delete each file
+      for (const file of files) {
+        try {
+          await this.deleteFile(file.id);
+          deletedCount++;
+        } catch (error) {
+          this.logger.warn(`Failed to delete file ${file.id} (${file.name}) from session ${sessionId}`);
+        }
+      }
+
+      // Optionally delete the session folder itself
+      try {
+        await this.deleteFile(sessionFolderId);
+        this.sessionFolderCache.delete(sessionId);
+        this.logger.log(`Session folder deleted for ${sessionId}`);
+      } catch (error) {
+        this.logger.warn(`Failed to delete session folder for ${sessionId}`);
+      }
+
+      this.logger.log(`Cleanup completed for session ${sessionId}: ${deletedCount} files deleted`);
+
+      return {
+        success: true,
+        message: `Session cleanup completed. ${deletedCount} files deleted.`,
+        filesDeleted: deletedCount,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to cleanup session ${sessionId}:`, error);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to cleanup session files');
+    }
+  }
+
+  /**
+   * Get session folder URL (for debugging/reference)
+   * @param sessionId Unique session ID
+   * @returns Folder URL
+   */
+  async getSessionFolderUrl(sessionId: string): Promise<string> {
+    try {
+      const folderId = await this.getOrCreateSessionFolder(sessionId);
+      return `https://drive.google.com/drive/folders/${folderId}`;
+    } catch (error) {
+      this.logger.error(`Failed to get folder URL for session ${sessionId}:`, error);
+      throw new BadRequestException('Failed to retrieve session folder URL');
+    }
+  }
+}

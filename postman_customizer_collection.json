@@ -1,0 +1,608 @@
+{
+  "info": {
+    "_postman_id": "loretana-customizer-api",
+    "name": "Loretana Customizer API",
+    "description": "API collection for testing the customizer module with Supabase Storage - Saves original + shaped images",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "localhost:3000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Upload Image with Customization",
+      "event": [],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "image.png",
+              "description": "PNG or JPG image to customize"
+            },
+            {
+              "key": "session",
+              "type": "text",
+              "value": "sess_user123",
+              "description": "Unique session ID"
+            },
+            {
+              "key": "x",
+              "type": "text",
+              "value": "50",
+              "description": "Horizontal position (0-100%)"
+            },
+            {
+              "key": "y",
+              "type": "text",
+              "value": "50",
+              "description": "Vertical position (0-100%)"
+            },
+            {
+              "key": "zoom",
+              "type": "text",
+              "value": "1.2",
+              "description": "Zoom level (0.5-3.0)"
+            },
+            {
+              "key": "shape",
+              "type": "text",
+              "value": "circle",
+              "description": "Shape type: circle, heart, or rectangle"
+            },
+            {
+              "key": "shop",
+              "type": "text",
+              "value": "myshop.myshopify.com",
+              "description": "Optional: Shopify shop domain"
+            },
+            {
+              "key": "accessToken",
+              "type": "text",
+              "value": "",
+              "description": "Optional: Shopify access token"
+            }
+          ]
+        },
+        "url": {
+          "raw": "http://localhost:3000/customizer/upload",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "customizer",
+            "upload"
+          ]
+        },
+        "description": "Upload image with customization (position, zoom, shape). Returns URLs for both original and shaped images."
+      },
+      "response": []
+    },
+    {
+      "name": "Upload Image - Circle Shape",
+      "event": [],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "image.png"
+            },
+            {
+              "key": "session",
+              "type": "text",
+              "value": "sess_circle_001"
+            },
+            {
+              "key": "x",
+              "type": "text",
+              "value": "50"
+            },
+            {
+              "key": "y",
+              "type": "text",
+              "value": "50"
+            },
+            {
+              "key": "zoom",
+              "type": "text",
+              "value": "1.0"
+            },
+            {
+              "key": "shape",
+              "type": "text",
+              "value": "circle"
+            }
+          ]
+        },
+        "url": {
+          "raw": "http://localhost:3000/customizer/upload",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "customizer",
+            "upload"
+          ]
+        },
+        "description": "Example: Upload image with circle shape mask"
+      },
+      "response": []
+    },
+    {
+      "name": "Upload Image - Heart Shape",
+      "event": [],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "image.png"
+            },
+            {
+              "key": "session",
+              "type": "text",
+              "value": "sess_heart_001"
+            },
+            {
+              "key": "x",
+              "type": "text",
+              "value": "50"
+            },
+            {
+              "key": "y",
+              "type": "text",
+              "value": "50"
+            },
+            {
+              "key": "zoom",
+              "type": "text",
+              "value": "1.0"
+            },
+            {
+              "key": "shape",
+              "type": "text",
+              "value": "heart"
+            }
+          ]
+        },
+        "url": {
+          "raw": "http://localhost:3000/customizer/upload",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "customizer",
+            "upload"
+          ]
+        },
+        "description": "Example: Upload image with heart shape mask"
+      },
+      "response": []
+    },
+    {
+      "name": "Upload Image - Rectangle Shape",
+      "event": [],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "image.png"
+            },
+            {
+              "key": "session",
+              "type": "text",
+              "value": "sess_rect_001"
+            },
+            {
+              "key": "x",
+              "type": "text",
+              "value": "50"
+            },
+            {
+              "key": "y",
+              "type": "text",
+              "value": "50"
+            },
+            {
+              "key": "zoom",
+              "type": "text",
+              "value": "1.0"
+            },
+            {
+              "key": "shape",
+              "type": "text",
+              "value": "rectangle"
+            }
+          ]
+        },
+        "url": {
+          "raw": "http://localhost:3000/customizer/upload",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "customizer",
+            "upload"
+          ]
+        },
+        "description": "Example: Upload image with rectangle shape mask"
+      },
+      "response": []
+    },
+    {
+      "name": "Get Session Info",
+      "event": [],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/customizer/session/sess_user123",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "customizer",
+            "session",
+            "sess_user123"
+          ]
+        },
+        "description": "Get session folder information and path"
+      },
+      "response": []
+    },
+    {
+      "name": "Cleanup Session",
+      "event": [],
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/customizer/cleanup/sess_user123",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "customizer",
+            "cleanup",
+            "sess_user123"
+          ]
+        },
+        "description": "Delete all files in a session folder (original and shaped images)"
+      },
+      "response": []
+    },
+    {
+      "name": "Generate QR Code (Stream)",
+      "event": [],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/qr?url=https://www.example.com&width=400&errorCorrection=H",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "qr"
+          ],
+          "query": [
+            {
+              "key": "url",
+              "value": "https://www.example.com",
+              "description": "URL to encode in QR code"
+            },
+            {
+              "key": "width",
+              "value": "400",
+              "description": "QR code size in pixels (optional, default: 400)"
+            },
+            {
+              "key": "errorCorrection",
+              "value": "H",
+              "description": "Error correction level: L, M, Q, or H (optional, default: H)"
+            }
+          ]
+        },
+        "description": "Generate QR code and return as PNG image stream. Does not save to storage."
+      },
+      "response": []
+    },
+    {
+      "name": "Generate and Save QR Code",
+      "event": [],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"url\": \"https://www.example.com/product/123\",\n  \"sessionId\": \"sess_user123\",\n  \"width\": 400,\n  \"errorCorrection\": \"H\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/qr/save",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "qr",
+            "save"
+          ]
+        },
+        "description": "Generate QR code and save it to Supabase Storage in the session folder. Creates folder if it doesn't exist."
+      },
+      "response": []
+    },
+    {
+      "name": "Create Upload Record with Short Code",
+      "event": [],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"imageUrl\": \"https://yoursupabase.supabase.co/storage/v1/object/public/customizer-uploads/customizer/sess_user123/circle.png\",\n  \"sessionId\": \"sess_user123\",\n  \"productId\": \"gid://shopify/Product/123456\",\n  \"productName\": \"Custom T-Shirt\",\n  \"metadata\": {\n    \"zoom\": 1.2,\n    \"x\": 50,\n    \"y\": 50,\n    \"shape\": \"circle\"\n  }\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/uploads",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "uploads"
+          ]
+        },
+        "description": "Create upload record and get short code for QR. Returns code like ABC123XY for URL: loretana.com/view/ABC123XY"
+      },
+      "response": []
+    },
+    {
+      "name": "Get Upload by Code",
+      "event": [],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/uploads/ABC123XY",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "uploads",
+            "ABC123XY"
+          ]
+        },
+        "description": "Retrieve upload record by short code. Use this when customer scans QR code."
+      },
+      "response": []
+    },
+    {
+      "name": "Get All Uploads for Session",
+      "event": [],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/uploads/session/sess_user123",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "uploads",
+            "session",
+            "sess_user123"
+          ]
+        },
+        "description": "Get all upload records for a specific session ID."
+      },
+      "response": []
+    },
+    {
+      "name": "Update Upload Images",
+      "event": [],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"originalImageUrl\": \"https://yoursupabase.supabase.co/storage/v1/object/public/customizer-uploads/customizer/sess_user123/original.png\",\n  \"shapedImageUrl\": \"https://yoursupabase.supabase.co/storage/v1/object/public/customizer-uploads/customizer/sess_user123/circle.png\"\n}"
+        },
+        "url": {
+          "raw": "http://localhost:3000/uploads/ABC123XY/images",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "uploads",
+            "ABC123XY",
+            "images"
+          ]
+        },
+        "description": "Add original and shaped image URLs to an existing upload record."
+      },
+      "response": []
+    },
+    {
+      "name": "Delete Upload",
+      "event": [],
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/uploads/ABC123XY",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "uploads",
+            "ABC123XY"
+          ]
+        },
+        "description": "Delete an upload record by code."
+      },
+      "response": []
+    },
+    {
+      "name": "Upload Product Image (Complete Flow)",
+      "event": [],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "image.png",
+              "description": "Product image file (PNG or JPG)"
+            },
+            {
+              "key": "productId",
+              "type": "text",
+              "value": "gid://shopify/Product/123456",
+              "description": "Optional: Shopify product ID"
+            },
+            {
+              "key": "productName",
+              "type": "text",
+              "value": "Custom T-Shirt",
+              "description": "Optional: Product name"
+            },
+            {
+              "key": "sessionId",
+              "type": "text",
+              "value": "sess_user123",
+              "description": "Optional: Session ID from customizer"
+            },
+            {
+              "key": "metadata",
+              "type": "text",
+              "value": "{\"zoom\": 1.2, \"shape\": \"circle\", \"x\": 50, \"y\": 50}",
+              "description": "Optional: JSON metadata"
+            }
+          ]
+        },
+        "url": {
+          "raw": "http://localhost:3000/products/upload",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "products",
+            "upload"
+          ]
+        },
+        "description": "Upload original image (no customization/scaling) \u2192 Store in Supabase \u2192 Create record \u2192 Generate QR \u2192 All in one! Returns: code, imageUrl, productUrl (loretana.com/product/CODE), qrUrl"
+      },
+      "response": []
+    },
+    {
+      "name": "Get Product by Code",
+      "event": [],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/products/ABC123XY",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "products",
+            "ABC123XY"
+          ]
+        },
+        "description": "Get product image and data by code. Use this when customer visits loretana.com/product/ABC123XY"
+      },
+      "response": []
+    },
+    {
+      "name": "Delete Product",
+      "event": [],
+      "request": {
+        "method": "DELETE",
+        "header": [],
+        "url": {
+          "raw": "http://localhost:3000/products/ABC123XY",
+          "protocol": "http",
+          "host": [
+            "localhost"
+          ],
+          "port": "3000",
+          "path": [
+            "products",
+            "ABC123XY"
+          ]
+        },
+        "description": "Delete product and all associated files."
+      },
+      "response": []
+    }
+  ]
+}

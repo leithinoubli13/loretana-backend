@@ -3,9 +3,12 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { QrModule } from './qr/qr.module';
 import { EmailModule } from './email/email.module';
+import { CustomizerModule } from './customizer/customizer.module';
+import { ShopifyModule } from './shopify/shopify.module';
+import { ProductUploadsModule } from './product-uploads/product-uploads.module';
 
 @Module({
-  imports: [QrModule, EmailModule],
+  imports: [QrModule, EmailModule, CustomizerModule, ShopifyModule, ProductUploadsModule],
   controllers: [AppController],
   providers: [AppService],
 })
