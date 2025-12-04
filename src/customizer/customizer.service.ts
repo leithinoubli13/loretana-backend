@@ -381,13 +381,33 @@ export class CustomizerService {
         `Uploading customized image for session: ${finalSessionId} (shape: ${customizationData.shape})`,
       );
 
-      // Delete existing files
+      // Delete all existing files in the session folder to ensure clean replacement
       try {
-        await this.supabase.storage
+        const folderPath = `customizer/${finalSessionId}`;
+        const { data: existingFiles, error: listError } = await this.supabase.storage
           .from('customizer-uploads')
-          .remove([originalFilePath, shapedFilePath]);
+          .list(folderPath);
+
+        if (!listError && existingFiles && existingFiles.length > 0) {
+          const filePaths = existingFiles.map(
+            (f: any) => `${folderPath}/${f.name}`,
+          );
+          const { error: deleteError } = await this.supabase.storage
+            .from('customizer-uploads')
+            .remove(filePaths);
+
+          if (deleteError) {
+            this.logger.warn(
+              `Failed to delete old files for session ${finalSessionId}: ${deleteError.message}`,
+            );
+          } else {
+            this.logger.log(
+              `Deleted ${filePaths.length} old file(s) from session ${finalSessionId}`,
+            );
+          }
+        }
       } catch (deleteError) {
-        this.logger.debug(`No existing files to delete`);
+        this.logger.debug(`Error during cleanup: ${deleteError}`);
       }
 
       // Upload original image
