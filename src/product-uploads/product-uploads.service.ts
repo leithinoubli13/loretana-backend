@@ -61,6 +61,7 @@ export class ProductUploadsService {
     productId?: string,
     productName?: string,
     metadata?: Record<string, any>,
+    code?: string,
   ): Promise<{ code: string; uploadId: string; qrUrl: string }> {
     if (!this.supabase) {
       throw new BadRequestException(
@@ -75,35 +76,37 @@ export class ProductUploadsService {
     }
 
     try {
-      let code = this.generateShortCode();
+      let finalCode = code || this.generateShortCode();
       let attempts = 0;
       const maxAttempts = 10;
 
-      // Ensure code is unique
-      while (attempts < maxAttempts) {
-        const { data: existingRecord } = await this.supabase
-          .from('uploads')
-          .select('code')
-          .eq('code', code)
-          .single();
+      // Ensure code is unique (skip if code was provided as it's pre-validated)
+      if (!code) {
+        while (attempts < maxAttempts) {
+          const { data: existingRecord } = await this.supabase
+            .from('uploads')
+            .select('code')
+            .eq('code', finalCode)
+            .single();
 
-        if (!existingRecord) {
-          break; // Code is unique
+          if (!existingRecord) {
+            break; // Code is unique
+          }
+
+          finalCode = this.generateShortCode();
+          attempts++;
         }
 
-        code = this.generateShortCode();
-        attempts++;
-      }
-
-      if (attempts >= maxAttempts) {
-        throw new Error('Could not generate unique code after 10 attempts');
+        if (attempts >= maxAttempts) {
+          throw new Error('Could not generate unique code after 10 attempts');
+        }
       }
 
       // Insert the upload record
       const { data: uploadRecord, error: insertError } = await this.supabase
         .from('uploads')
         .insert({
-          code,
+          code: finalCode,
           session_id: sessionId,
           image_url: imageUrl,
           product_id: productId,
@@ -119,14 +122,14 @@ export class ProductUploadsService {
         );
       }
 
-      const qrUrl = `loretana.com/view/${code}`;
+      const qrUrl = `loretana.com/view/${finalCode}`;
 
       this.logger.log(
-        `Upload record created: Code=${code}, SessionId=${sessionId}, ProductId=${productId}`,
+        `Upload record created: Code=${finalCode}, SessionId=${sessionId}, ProductId=${productId}`,
       );
 
       return {
-        code,
+        code: finalCode,
         uploadId: uploadRecord.id,
         qrUrl,
       };

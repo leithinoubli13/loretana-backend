@@ -195,7 +195,7 @@ export class ProductsController {
 
       this.logger.log(`Image uploaded: ${imageUrl}`);
 
-      // Step 4: Create upload record in database
+      // Step 4: Create upload record in database (pass the shortCode so it matches storage folder)
       const metadataObj = metadata ? JSON.parse(metadata) : {};
 
       const { uploadId } = await this.uploadsService.createUpload(
@@ -204,6 +204,7 @@ export class ProductsController {
         productId,
         productName,
         metadataObj,
+        shortCode,
       );
 
       this.logger.log(`Upload record created: ${shortCode}`);
