@@ -372,7 +372,9 @@ export class CustomizerService {
 
       const finalFolderPath = `customizer/${finalSessionId}`;
       const originalFileName = 'original.png';
-      const shapedFileName = `${customizationData.shape}.png`;
+      // Use timestamp in shaped filename to ensure each upload gets a unique file
+      const timestamp = Date.now();
+      const shapedFileName = `${customizationData.shape}_${timestamp}.png`;
 
       const originalFilePath = `${finalFolderPath}/${originalFileName}`;
       const shapedFilePath = `${finalFolderPath}/${shapedFileName}`;
@@ -464,10 +466,10 @@ export class CustomizerService {
         .from('customizer-uploads')
         .getPublicUrl(shapedFilePath);
 
-      // Add cache-busting query param to force fresh image fetch on client
+      // Add aggressive cache-busting: use timestamp + random string to force fresh fetch
       const baseOriginalUrl = originalUrlData?.publicUrl || '';
       const baseShapedUrl = shapedUrlData?.publicUrl || '';
-      const cacheBuster = `v=${Date.now()}`;
+      const cacheBuster = `v=${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
       const originalUrlWithCacheBust = baseOriginalUrl
         ? `${baseOriginalUrl}${baseOriginalUrl.includes('?') ? '&' : '?'}${cacheBuster}`
         : '';
