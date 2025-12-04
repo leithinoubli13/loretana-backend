@@ -47,30 +47,37 @@ export class CustomizerService {
 
   /**
    * Generate a unique session ID that doesn't conflict with existing Shopify orders
+   * Checks for both session_id AND product_id combination in order properties
    * Returns both the session ID and the reason for any changes
    */
   private async generateUniqueSessionId(
     baseSessionId: string,
+    productId: string,
   ): Promise<{ sessionId: string; reason: string }> {
     try {
       // Fetch all orders from Shopify to check for conflicts
       const ordersResponse = await this.shopifyService.getOrders(250, 'any');
       const existingOrders = ordersResponse.orders || [];
 
-      // Extract all note/description fields that might contain session IDs
-      const usedSessionIds = new Set<string>();
-      existingOrders.forEach((order: any) => {
-        // Check if session ID appears in order notes or properties
-        if (order.note && order.note.includes(baseSessionId)) {
-          usedSessionIds.add(baseSessionId);
-        }
+      // Check if the combination of session_id and product_id exists in any order
+      const conflictExists = existingOrders.some((order: any) => {
+        const properties = order.properties || [];
+        return properties.some(
+          (prop: any) =>
+            prop.name === 'session_id' &&
+            prop.value === baseSessionId &&
+            properties.some(
+              (p: any) =>
+                p.name === 'product_id' && p.value === productId,
+            ),
+        );
       });
 
-      // If the base session ID is not used, return it with reason
-      if (!usedSessionIds.has(baseSessionId)) {
+      // If no conflict, return original session ID
+      if (!conflictExists) {
         return {
           sessionId: baseSessionId,
-          reason: 'Session ID is available and not used in any orders',
+          reason: `Session ID and Product ID combination is available and not used in any orders`,
         };
       }
 
@@ -79,7 +86,7 @@ export class CustomizerService {
       let counter = 1;
       const maxAttempts = 100;
 
-      while (usedSessionIds.has(newSessionId) && counter < maxAttempts) {
+      while (counter < maxAttempts) {
         // Generate with timestamp and random suffix
         const timestamp = Date.now().toString().slice(-4);
         const randomSuffix = Math.random()
@@ -87,25 +94,42 @@ export class CustomizerService {
           .substring(2, 8)
           .toUpperCase();
         newSessionId = `${baseSessionId}_${timestamp}_${randomSuffix}`;
+
+        // Check if new combination exists
+        const newConflictExists = existingOrders.some((order: any) => {
+          const properties = order.properties || [];
+          return properties.some(
+            (prop: any) =>
+              prop.name === 'session_id' &&
+              prop.value === newSessionId &&
+              properties.some(
+                (p: any) =>
+                  p.name === 'product_id' && p.value === productId,
+              ),
+          );
+        });
+
+        if (!newConflictExists) {
+          break;
+        }
         counter++;
       }
 
       this.logger.log(
-        `Session ID conflict detected. Original: ${baseSessionId}, New: ${newSessionId}`,
+        `Session ID conflict detected for product ${productId}. Original: ${baseSessionId}, New: ${newSessionId}`,
       );
       return {
         sessionId: newSessionId,
-        reason: `Session ID conflict detected: "${baseSessionId}" is already used in existing orders. Generated new unique ID to avoid duplication.`,
+        reason: `Conflict detected: session_id "${baseSessionId}" with product_id "${productId}" already exists in orders. Generated new unique session ID.`,
       };
     } catch (error) {
       this.logger.warn(
-        'Could not check Shopify orders for session ID conflicts, using original ID',
+        `Could not check Shopify orders for session ID conflicts, using original ID`,
         error,
       );
       return {
         sessionId: baseSessionId,
-        reason:
-          'Could not verify with Shopify orders. Using original session ID.',
+        reason: `Could not verify with Shopify orders. Using original session ID.`,
       };
     }
   }
@@ -293,11 +317,15 @@ export class CustomizerService {
 
   /**
    * Upload image with customization data
-   * Saves two images: original and shaped/transformed version
-   * If session folder already exists, reuse it; otherwise check for Shopify conflicts
+   * Folder structure: customizer/sessionId-productId/
+   * Flow:
+   * 1. Check if session_id + product_id exists in Shopify orders; if yes, generate new session_id
+   * 2. If not in orders, check if folder exists in storage; if yes, reuse and replace images
+   * 3. If neither, create new folder with provided session_id
    */
   async uploadSessionImage(
     sessionId: string,
+    productId: string,
     file: Express.Multer.File,
     customizationData: CustomizationData,
   ): Promise<{
@@ -308,6 +336,7 @@ export class CustomizerService {
     shapedUrl: string;
     message: string;
     sessionIdUsed: string;
+    productIdUsed: string;
     sessionIdChanged: boolean;
     sessionIdChangeReason: string;
   }> {
@@ -317,6 +346,10 @@ export class CustomizerService {
 
     if (!sessionId || sessionId.trim() === '') {
       throw new BadRequestException('Session ID is required');
+    }
+
+    if (!productId || productId.trim() === '') {
+      throw new BadRequestException('Product ID is required');
     }
 
     if (!this.supabase) {
@@ -336,41 +369,45 @@ export class CustomizerService {
       let sessionIdChangeReason = '';
       let sessionIdChanged = false;
 
-      // Step 1: Check if session ID conflicts with existing Shopify orders
-      const sessionIdResult = await this.generateUniqueSessionId(sessionId);
+      // Step 1: Check if session_id + product_id exists in Shopify orders
+      const sessionIdResult = await this.generateUniqueSessionId(
+        sessionId,
+        productId,
+      );
       finalSessionId = sessionIdResult.sessionId;
       sessionIdChangeReason = sessionIdResult.reason;
       sessionIdChanged = originalSessionId !== finalSessionId;
 
       if (sessionIdChanged) {
         this.logger.log(
-          `Session ID conflict with Shopify orders. Original: ${originalSessionId}, Generated new: ${finalSessionId}. Reason: ${sessionIdChangeReason}`,
+          `Session ID conflict with Shopify orders for product ${productId}. Original: ${originalSessionId}, Generated new: ${finalSessionId}. Reason: ${sessionIdChangeReason}`,
         );
       } else {
-        // Session ID is not in Shopify orders
-        // Step 2: Check if session folder already exists in storage
-        const folderPath = `customizer/${sessionId}`;
+        // Session ID + Product ID combination not in Shopify orders
+        // Step 2: Check if folder already exists in storage
+        const folderPath = `customizer/${sessionId}-${productId}`;
         const { data: existingFiles, error: listError } =
           await this.supabase.storage
             .from('customizer-uploads')
             .list(folderPath);
 
         if (existingFiles && existingFiles.length > 0) {
-          // Session folder already exists, will reuse it and replace images
-          sessionIdChangeReason = `Session ID not in Shopify orders. Folder exists in storage, reusing session and replacing existing images.`;
+          // Folder exists, will reuse it and replace images
+          sessionIdChangeReason = `Session ID + Product ID not in Shopify orders. Folder exists in storage, reusing and replacing existing images.`;
           this.logger.log(
-            `Session ID valid (not in Shopify orders). Reusing existing session folder: ${folderPath}`,
+            `Session ID valid (not in Shopify orders). Reusing existing session-product folder: ${folderPath}`,
           );
         } else {
-          // No Shopify conflict and no existing storage folder - use normally
-          sessionIdChangeReason = `Session ID not in Shopify orders and no existing folder in storage. Using session ID normally for new upload.`;
+          // No conflict and no existing folder - use normally
+          sessionIdChangeReason = `Session ID + Product ID not in Shopify orders and no existing folder. Creating new upload.`;
           this.logger.log(
             `Session ID validated: ${originalSessionId}. No conflicts or existing storage.`,
           );
         }
       }
 
-      const finalFolderPath = `customizer/${finalSessionId}`;
+      // Use folder structure: customizer/sessionId-productId/
+      const finalFolderPath = `customizer/${finalSessionId}-${productId}`;
       const originalFileName = 'original.png';
       // Use timestamp in shaped filename to ensure each upload gets a unique file
       const timestamp = Date.now();
@@ -380,19 +417,18 @@ export class CustomizerService {
       const shapedFilePath = `${finalFolderPath}/${shapedFileName}`;
 
       this.logger.log(
-        `Uploading customized image for session: ${finalSessionId} (shape: ${customizationData.shape})`,
+        `Uploading customized image for session: ${finalSessionId}, product: ${productId} (shape: ${customizationData.shape})`,
       );
 
-      // Delete all existing files in the session folder to ensure clean replacement
+      // Delete all existing files in the session-product folder to ensure clean replacement
       try {
-        const folderPath = `customizer/${finalSessionId}`;
         const { data: existingFiles, error: listError } = await this.supabase.storage
           .from('customizer-uploads')
-          .list(folderPath);
+          .list(finalFolderPath);
 
         if (!listError && existingFiles && existingFiles.length > 0) {
           const filePaths = existingFiles.map(
-            (f: any) => `${folderPath}/${f.name}`,
+            (f: any) => `${finalFolderPath}/${f.name}`,
           );
           const { error: deleteError } = await this.supabase.storage
             .from('customizer-uploads')
@@ -400,11 +436,11 @@ export class CustomizerService {
 
           if (deleteError) {
             this.logger.warn(
-              `Failed to delete old files for session ${finalSessionId}: ${deleteError.message}`,
+              `Failed to delete old files for ${finalFolderPath}: ${deleteError.message}`,
             );
           } else {
             this.logger.log(
-              `Deleted ${filePaths.length} old file(s) from session ${finalSessionId}`,
+              `Deleted ${filePaths.length} old file(s) from ${finalFolderPath}`,
             );
           }
         }
@@ -478,7 +514,7 @@ export class CustomizerService {
         : '';
 
       this.logger.log(
-        `Successfully uploaded both images for session: ${finalSessionId}`,
+        `Successfully uploaded both images for session: ${finalSessionId}, product: ${productId}`,
       );
 
       return {
@@ -489,6 +525,7 @@ export class CustomizerService {
         shapedUrl: shapedUrlWithCacheBust,
         message: 'Image customized and uploaded successfully',
         sessionIdUsed: finalSessionId,
+        productIdUsed: productId,
         sessionIdChanged: sessionIdChanged,
         sessionIdChangeReason: sessionIdChangeReason,
       };

@@ -26,6 +26,7 @@ export class CustomizerController {
    * Form Data:
    * - file: PNG or JPG image file
    * - session: unique session ID (e.g., sess_abcd123)
+   * - productId: product ID for folder organization
    * - x: horizontal position (0-100%)
    * - y: vertical position (0-100%)
    * - zoom: zoom level (0.5-3.0)
@@ -42,6 +43,7 @@ export class CustomizerController {
     @Body()
     body: {
       session: string;
+      productId: string;
       x: string;
       y: string;
       zoom: string;
@@ -51,11 +53,18 @@ export class CustomizerController {
     },
   ): Promise<any> {
     try {
-      this.logger.log(`Upload request received for session: ${body.session}`);
+      this.logger.log(`Upload request received for session: ${body.session}, productId: ${body.productId}`);
 
       if (!body.session) {
         throw new HttpException(
           'Session ID is required',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      if (!body.productId) {
+        throw new HttpException(
+          'Product ID is required',
           HttpStatus.BAD_REQUEST,
         );
       }
@@ -86,6 +95,7 @@ export class CustomizerController {
 
       const uploadResult = await this.customizerService.uploadSessionImage(
         body.session,
+        body.productId,
         file,
         customizationData as any,
       );
