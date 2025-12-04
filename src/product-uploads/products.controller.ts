@@ -91,11 +91,32 @@ export class ProductsController {
           isNewSession = false;
           sessionUpdateReason = `Updating existing session "${sessionId}" with code "${existingSessionCode}"`;
           
-          // Remove old QR code from storage if exists
-          const qrFilePath = `products/${existingSessionCode}/qr_code.png`;
-          await this.supabase.storage
+          // Remove old files in the product folder so the new image fully replaces previous assets
+          const folderPath = `products/${existingSessionCode}`;
+          const { data: filesList, error: listError } = await this.supabase.storage
             .from('customizer-uploads')
-            .remove([qrFilePath]);
+            .list(folderPath);
+
+          if (listError) {
+            this.logger.warn(
+              `Failed to list files for ${existingSessionCode}: ${listError.message}`,
+            );
+          } else if (filesList && filesList.length > 0) {
+            const pathsToRemove = filesList.map((f: any) => `${folderPath}/${f.name}`);
+            const { error: removeError } = await this.supabase.storage
+              .from('customizer-uploads')
+              .remove(pathsToRemove);
+
+            if (removeError) {
+              this.logger.warn(
+                `Failed to remove old files for ${existingSessionCode}: ${removeError.message}`,
+              );
+            } else {
+              this.logger.log(
+                `Removed ${pathsToRemove.length} old file(s) for ${existingSessionCode}`,
+              );
+            }
+          }
         } else {
           sessionUpdateReason = `New session "${sessionId}" created`;
         }
