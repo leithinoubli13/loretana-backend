@@ -29,16 +29,19 @@ export class CustomizerService {
         process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
       if (!supabaseUrl || !supabaseKey) {
-        throw new Error(
-          'Supabase credentials not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY) environment variables.',
+        this.logger.warn(
+          'Supabase credentials not configured. Supabase-dependent features will be disabled. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY) environment variables.',
         );
+        this.supabase = null;
+        return;
       }
 
       this.supabase = createClient(supabaseUrl, supabaseKey);
       this.logger.log('Supabase Storage initialized successfully');
     } catch (error) {
       this.logger.error('Failed to initialize Supabase:', error);
-      throw error;
+      // Do not throw here to avoid crashing the whole app during startup.
+      this.supabase = null;
     }
   }
 
