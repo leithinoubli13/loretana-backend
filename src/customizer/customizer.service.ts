@@ -444,6 +444,17 @@ export class CustomizerService {
         .from('customizer-uploads')
         .getPublicUrl(shapedFilePath);
 
+      // Add cache-busting query param to force fresh image fetch on client
+      const baseOriginalUrl = originalUrlData?.publicUrl || '';
+      const baseShapedUrl = shapedUrlData?.publicUrl || '';
+      const cacheBuster = `v=${Date.now()}`;
+      const originalUrlWithCacheBust = baseOriginalUrl
+        ? `${baseOriginalUrl}${baseOriginalUrl.includes('?') ? '&' : '?'}${cacheBuster}`
+        : '';
+      const shapedUrlWithCacheBust = baseShapedUrl
+        ? `${baseShapedUrl}${baseShapedUrl.includes('?') ? '&' : '?'}${cacheBuster}`
+        : '';
+
       this.logger.log(
         `Successfully uploaded both images for session: ${finalSessionId}`,
       );
@@ -452,8 +463,8 @@ export class CustomizerService {
         success: true,
         originalFileId: originalFilePath,
         shapedFileId: shapedFilePath,
-        originalUrl: originalUrlData?.publicUrl || '',
-        shapedUrl: shapedUrlData?.publicUrl || '',
+        originalUrl: originalUrlWithCacheBust,
+        shapedUrl: shapedUrlWithCacheBust,
         message: 'Image customized and uploaded successfully',
         sessionIdUsed: finalSessionId,
         sessionIdChanged: sessionIdChanged,
